@@ -1,0 +1,59 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>Scheduling_BJMP</RootNamespace>
+    <StartupObject>Sub Main</StartupObject>
+    <UseWindowsForms>true</UseWindowsForms>
+    <MyType>WindowsForms</MyType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3240.44" GeneratePathProperty="true" ExcludeAssets="build;buildTransitive" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.Web.WebView2.Core">
+      <HintPath>$(PkgMicrosoft_Web_WebView2)\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.WinForms">
+      <HintPath>$(PkgMicrosoft_Web_WebView2)\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x86\native\WebView2Loader.dll" Link="runtimes\win-x86\native\WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll" Link="runtimes\win-x64\native\WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-arm64\native\WebView2Loader.dll" Link="runtimes\win-arm64\native\WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Calendar\calendar.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Import Include="System.Data" />
+    <Import Include="System.Drawing" />
+    <Import Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="My Project\Application.Designer.vb">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Application.myapp</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="My Project\Application.myapp">
+      <Generator>MyApplicationCodeGenerator</Generator>
+      <LastGenOutput>Application.Designer.vb</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+</Project>

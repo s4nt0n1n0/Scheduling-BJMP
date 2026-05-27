@@ -25,6 +25,9 @@ Public Class Form1
     Private ReadOnly dateListTitleLabel As New Label()
     Private hearings As New List(Of HearingRecord)()
     Private selectedDate As Date = Date.Today
+    Private dateWasClicked As Boolean = False
+    ' Persists history log entries across ReloadCalendar() calls (keyed by Excel row Id)
+    Private _historyCache As New Dictionary(Of Integer, List(Of String))()
 
     Private Shared ReadOnly JsonOptions As New JsonSerializerOptions With {
         .Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -70,12 +73,12 @@ Public Class Form1
         Dim headerStrip As New Panel With {
             .Dock = DockStyle.Top,
             .Height = 56,
-            .BackColor = Color.FromArgb(18, 54, 93)
+            .BackColor = Color.FromArgb(242, 201, 76)
         }
         Dim headerLbl As New Label With {
             .Text = "BJMP  HEARING PANEL",
             .Dock = DockStyle.Fill,
-            .ForeColor = Color.White,
+            .ForeColor = Color.FromArgb(31, 41, 55),
             .Font = New Font("Segoe UI", 11.5F, FontStyle.Bold),
             .TextAlign = ContentAlignment.MiddleCenter,
             .Padding = New Padding(0, 0, 0, 2)
@@ -144,6 +147,13 @@ Public Class Form1
                 Dim item = TryCast(hearingListBox.SelectedItem, HearingRecord)
                 If item IsNot Nothing Then
                     DisplayHearing(item)
+                End If
+            End Sub
+        AddHandler hearingListBox.DoubleClick,
+            Sub()
+                Dim item = TryCast(hearingListBox.SelectedItem, HearingRecord)
+                If item IsNot Nothing Then
+                    ShowHearingDetailPopup(item)
                 End If
             End Sub
         listSection.Controls.Add(hearingListBox)
@@ -334,7 +344,12 @@ Public Class Form1
                     Case "select"
                         SelectHearing(root.GetProperty("id").GetString())
                     Case "move"
-                        MoveHearing(root.GetProperty("id").GetString(), Date.Parse(root.GetProperty("date").GetString()))
+                        Dim oldDateStr = ""
+                        Dim oldDateElement As JsonElement
+                        If root.TryGetProperty("oldDate", oldDateElement) Then
+                            oldDateStr = oldDateElement.GetString()
+                        End If
+                        MoveHearing(root.GetProperty("id").GetString(), Date.Parse(root.GetProperty("date").GetString()), oldDateStr)
                 End Select
             End Using
         Catch ex As Exception
@@ -346,16 +361,24 @@ Public Class Form1
     Private Async Sub ReloadCalendar()
         Try
             hearings = repository.LoadHearings()
+            ' Restore in-memory history entries that survived the reload
+            For Each h In hearings
+                If _historyCache.ContainsKey(h.Id) Then
+                    h.HistoryLog = _historyCache(h.Id)
+                End If
+            Next
             RefreshSideList()
             Dim calendarEvents = hearings.
                 Where(Function(hearing) hearing.NextHearing <> Date.MinValue).
                 Select(Function(hearing) New With {
                     .id = hearing.Id.ToString(),
-                    .title = $"{hearing.No} - {hearing.NameOfPdl}",
+                    .title = hearing.No,
                     .start = hearing.NextHearing.ToString("yyyy-MM-dd"),
                     .color = "#12365d",
                     .textColor = "#ffffff",
                     .extendedProps = New With {
+                        .caseNo = hearing.No,
+                        .name = hearing.NameOfPdl,
                         .hearing1 = hearing.Hearing1,
                         .hearing2 = hearing.Hearing2,
                         .court = hearing.BrCourt
@@ -400,13 +423,13 @@ Public Class Form1
             Dim titlePanel As New Panel With {
                 .Dock = DockStyle.Top,
                 .Height = 60,
-                .BackColor = Color.FromArgb(18, 54, 93),
+                .BackColor = Color.FromArgb(242, 201, 76),
                 .Padding = New Padding(18, 0, 18, 0)
             }
             Dim titleLbl As New Label With {
                 .Text = $"📅  {clickedDate:dddd, MMMM d, yyyy}",
                 .Dock = DockStyle.Fill,
-                .ForeColor = Color.White,
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .Font = New Font("Segoe UI Semibold", 13.0F),
                 .TextAlign = ContentAlignment.MiddleLeft
             }
@@ -451,7 +474,7 @@ Public Class Form1
                     Dim statusDot As New Label With {
                         .Location = New Point(10, 13),
                         .Size = New Size(12, 12),
-                        .BackColor = Color.FromArgb(18, 54, 93)
+                        .BackColor = Color.FromArgb(242, 201, 76)
                     }
                     ' Make dot round-ish with a border
                     Dim noLbl As New Label With {
@@ -467,7 +490,7 @@ Public Class Form1
                         .Location = New Point(72, 0),
                         .Size = New Size(230, 38),
                         .TextAlign = ContentAlignment.MiddleLeft,
-                        .ForeColor = Color.FromArgb(18, 54, 93),
+                        .ForeColor = Color.FromArgb(31, 41, 55),
                         .Font = New Font("Segoe UI Semibold", 10.0F)
                     }
                     Dim courtLbl As New Label With {
@@ -482,17 +505,16 @@ Public Class Form1
                         .Text = "View",
                         .Location = New Point(410, 6),
                         .Size = New Size(55, 26),
-                        .BackColor = Color.FromArgb(18, 54, 93),
-                        .ForeColor = Color.White,
+                        .BackColor = Color.FromArgb(242, 201, 76),
+                        .ForeColor = Color.FromArgb(31, 41, 55),
                         .FlatStyle = FlatStyle.Flat,
                         .Font = New Font("Segoe UI", 8.5F)
                     }
                     viewBtn.FlatAppearance.BorderSize = 0
                     AddHandler viewBtn.Click, Sub()
-                        Dim originalDate = currentH.NextHearing.Date
-                        popup.Close()
-                        ShowHearingDetailPopup(currentH)
-                        ShowDatePopup(originalDate)
+                        ' Close the popup cleanly by setting DialogResult, then show detail
+                        popup.Tag = currentH  ' store the hearing to open after closing
+                        popup.DialogResult = DialogResult.OK
                     End Sub
                     row.Controls.AddRange(New Control() {statusDot, noLbl, nameLbl, courtLbl, viewBtn})
                     scroll.Controls.Add(row)
@@ -511,8 +533,8 @@ Public Class Form1
                 .Text = "＋ Add Hearing",
                 .Dock = DockStyle.Right,
                 .Width = 140,
-                .BackColor = Color.FromArgb(18, 54, 93),
-                .ForeColor = Color.White,
+                .BackColor = Color.FromArgb(242, 201, 76),
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .FlatStyle = FlatStyle.Flat,
                 .Font = New Font("Segoe UI Semibold", 9.5F)
             }
@@ -539,13 +561,23 @@ Public Class Form1
             popup.Controls.Add(scroll)
             popup.Controls.Add(btnPanel)
             popup.Controls.Add(titlePanel)
-            popup.ShowDialog(Me)
+
+            Dim result = popup.ShowDialog(Me)
+            Dim selectedHearing = TryCast(popup.Tag, HearingRecord)
+
+            ' After popup closes: if a hearing was tagged for viewing, show its detail popup
+            If result = DialogResult.OK AndAlso selectedHearing IsNot Nothing Then
+                ShowHearingDetailPopup(selectedHearing)
+                ' Re-open the date popup so the user can continue browsing
+                ShowDatePopup(clickedDate)
+            End If
         End Using
     End Sub
 
 
     Private Sub SelectDate(dateValue As Date)
         selectedDate = dateValue.Date
+        dateWasClicked = True
         detailsTitleLabel.Text = selectedDate.ToString("yyyy-MM-dd")
         RefreshSideList()
         If hearingListBox.Items.Count > 0 Then
@@ -567,18 +599,57 @@ Public Class Form1
         End If
     End Sub
 
-    Private Sub MoveHearing(idText As String, nextHearing As Date)
+    Private Sub MoveHearing(idText As String, nextHearing As Date, Optional oldDateStr As String = "")
         Dim rowId As Integer
         If Not Integer.TryParse(idText, rowId) Then
             Return
         End If
 
-        repository.MoveHearing(rowId, nextHearing.Date)
+        ' Find the hearing to copy its information
+        Dim originalHearing = hearings.FirstOrDefault(Function(item) item.Id = rowId)
+        If originalHearing Is Nothing Then
+            Return
+        End If
+
+        Dim oldDate = originalHearing.NextHearing.Date
+        If Not String.IsNullOrWhiteSpace(oldDateStr) Then
+            Dim parsedOld As Date
+            If Date.TryParse(oldDateStr, parsedOld) Then
+                oldDate = parsedOld.Date
+            End If
+        End If
+
+        ' Create a new duplicated hearing record for the target date
+        Dim duplicatedHearing As New HearingRecord With {
+            .No = originalHearing.No,
+            .NameOfPdl = originalHearing.NameOfPdl,
+            .BrCourt = originalHearing.BrCourt,
+            .Hearing1 = originalHearing.Hearing1,
+            .Hearing2 = originalHearing.Hearing2,
+            .NextHearing = nextHearing.Date
+        }
+
+        ' Keep history log details
+        Dim logEntry = $"{DateTime.Now:MMM d, yyyy h:mm tt} — Duplicated to {nextHearing.Date:MMMM d, yyyy} from original date {oldDate:MMMM d, yyyy}"
+        originalHearing.HistoryLog.Add(logEntry)
+        duplicatedHearing.HistoryLog.Add(logEntry)
+
+        ' Add the new hearing to Excel
+        Dim saved = repository.AddHearing(duplicatedHearing)
+        
+        ' Reload calendar
         ReloadCalendar()
-        Dim moved = hearings.FirstOrDefault(Function(item) item.Id = rowId)
-        If moved IsNot Nothing Then
-            moved.NextHearing = nextHearing.Date
-            DisplayHearing(moved)
+
+        ' Restore the history logs to the reloaded hearings
+        Dim reloadedOriginal = hearings.FirstOrDefault(Function(item) item.Id = originalHearing.Id)
+        If reloadedOriginal IsNot Nothing Then
+            reloadedOriginal.HistoryLog = originalHearing.HistoryLog
+        End If
+
+        Dim reloadedDuplicate = hearings.FirstOrDefault(Function(item) item.Id = saved.Id)
+        If reloadedDuplicate IsNot Nothing Then
+            reloadedDuplicate.HistoryLog = duplicatedHearing.HistoryLog
+            DisplayHearing(reloadedDuplicate)
         End If
     End Sub
 
@@ -595,6 +666,16 @@ Public Class Form1
     Private Sub ShowHearingDetailPopup(hearing As HearingRecord)
         DisplayHearing(hearing)
 
+        Dim historyList As New ListBox With {
+            .Dock = DockStyle.Fill,
+            .BorderStyle = BorderStyle.None,
+            .BackColor = Color.FromArgb(250, 251, 253),
+            .Font = New Font("Segoe UI", 8.5F),
+            .ForeColor = Color.FromArgb(70, 80, 94),
+            .ItemHeight = 20,
+            .SelectionMode = SelectionMode.None
+        }
+
         Using dlg As New Form()
             dlg.Text = hearing.NameOfPdl
             dlg.StartPosition = FormStartPosition.CenterParent
@@ -603,19 +684,19 @@ Public Class Form1
             dlg.MaximizeBox = False
             dlg.BackColor = Color.White
             dlg.Font = New Font("Segoe UI", 10.0F)
-            dlg.ClientSize = New Size(480, 400)
+            dlg.ClientSize = New Size(480, 520)
 
             ' Header bar
             Dim hdr As New Panel With {
                 .Height = 64,
-                .BackColor = Color.FromArgb(18, 54, 93),
+                .BackColor = Color.FromArgb(242, 201, 76),
                 .Margin = New Padding(0),
                 .Dock = DockStyle.Fill
             }
             Dim hdrName As New Label With {
                 .Text = hearing.NameOfPdl,
                 .Dock = DockStyle.Fill,
-                .ForeColor = Color.White,
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .Font = New Font("Segoe UI Semibold", 13.0F),
                 .TextAlign = ContentAlignment.MiddleCenter,
                 .Padding = New Padding(0, 0, 0, 4)
@@ -632,7 +713,7 @@ Public Class Form1
             Dim bodyPanel As New TableLayoutPanel With {
                 .Dock = DockStyle.Fill,
                 .ColumnCount = 1,
-                .RowCount = 3,
+                .RowCount = 5,
                 .Padding = New Padding(24, 16, 24, 12),
                 .Margin = New Padding(0),
                 .AutoScroll = True,
@@ -642,6 +723,8 @@ Public Class Form1
             bodyPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize)) ' Row 0: grid
             bodyPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 25)) ' Row 1: divLine
             bodyPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 36)) ' Row 2: btnPanel
+            bodyPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 15)) ' Row 3: history spacer
+            bodyPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' Row 4: history log
 
             ' Info grid
             Dim grid As New TableLayoutPanel With {
@@ -785,7 +868,7 @@ Public Class Form1
                 .Location = New Point(0, 0),
                 .Size = New Size(115, 34),
                 .BackColor = Color.FromArgb(198, 40, 40),
-                .ForeColor = Color.White,
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .FlatStyle = FlatStyle.Flat,
                 .Font = New Font("Segoe UI Semibold", 9.0F)
             }
@@ -818,28 +901,87 @@ Public Class Form1
                 .Text = "Save Changes",
                 .Location = New Point(200, 0),
                 .Size = New Size(130, 34),
-                .BackColor = Color.FromArgb(18, 54, 93),
-                .ForeColor = Color.White,
+                .BackColor = Color.FromArgb(242, 201, 76),
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .FlatStyle = FlatStyle.Flat,
                 .Font = New Font("Segoe UI Semibold", 9.0F)
             }
             saveBtn.FlatAppearance.BorderSize = 0
             AddHandler saveBtn.Click, Sub()
+                ' Guard: disable button immediately to prevent double-clicks causing cascading errors
+                saveBtn.Enabled = False
                 Try
-                    ' Update hearing record with new hearing texts and date
-                    hearing.Hearing1 = hearing1Text.Text.Trim()
-                    hearing.Hearing2 = hearing2Text.Text.Trim()
-                    hearing.NextHearing = datePicker.Value.Date
-                    
-                    repository.UpdateHearing(hearing)
-                    
-                    ReloadCalendar()
-                    DisplayHearing(hearing)
-                    
-                    MessageBox.Show(dlg, "Hearing changes saved successfully.", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                    dlg.Close()
+                    Dim originalDate = hearing.NextHearing.Date
+                    Dim selectedDate = datePicker.Value.Date
+
+                    If originalDate <> selectedDate Then
+                        ' 1. Update the original hearing's description fields and save it (retains history)
+                        hearing.Hearing1 = hearing1Text.Text.Trim()
+                        hearing.Hearing2 = hearing2Text.Text.Trim()
+                        repository.UpdateHearing(hearing)
+
+                        ' 2. Build log entry before creating the duplicate
+                        Dim logEntry = $"{DateTime.Now:MMM d, yyyy h:mm tt} — Duplicated to {selectedDate:MMMM d, yyyy} from original date {originalDate:MMMM d, yyyy}"
+
+                        ' 3. Write log entry to original record's cache
+                        If Not _historyCache.ContainsKey(hearing.Id) Then
+                            _historyCache(hearing.Id) = New List(Of String)()
+                        End If
+                        _historyCache(hearing.Id).Add(logEntry)
+                        hearing.HistoryLog = _historyCache(hearing.Id)
+
+                        ' 4. Create a new hearing duplicate scheduled for the next target date.
+                        '    Copy ALL fields from original (including Hearing1 / Hearing2)
+                        Dim duplicatedHearing As New HearingRecord With {
+                            .No = hearing.No,
+                            .NameOfPdl = hearing.NameOfPdl,
+                            .BrCourt = hearing.BrCourt,
+                            .Hearing1 = hearing.Hearing1,
+                            .Hearing2 = hearing.Hearing2,
+                            .NextHearing = selectedDate
+                        }
+                        repository.AddHearing(duplicatedHearing)
+
+                        ' 5. Write the same log entry to the new duplicate's cache (using its assigned Id)
+                        Dim dupLogEntry = $"{DateTime.Now:MMM d, yyyy h:mm tt} — Created from {originalDate:MMMM d, yyyy}"
+                        _historyCache(duplicatedHearing.Id) = New List(Of String)() From {dupLogEntry}
+                        duplicatedHearing.HistoryLog = _historyCache(duplicatedHearing.Id)
+
+                        ReloadCalendar()
+                        DisplayHearing(hearing)
+
+                        ' Update historyList directly inside the open dialog
+                        If historyList IsNot Nothing Then
+                            historyList.Items.Clear()
+                            For i = hearing.HistoryLog.Count - 1 To 0 Step -1
+                                historyList.Items.Add(hearing.HistoryLog(i))
+                            Next
+                        End If
+
+                        ' Re-enable the button after success so the user can make further changes
+                        saveBtn.Enabled = True
+
+                        MessageBox.Show(dlg, $"Hearing duplicated to {selectedDate:yyyy-MM-dd}. The original hearing has been updated and remains on {originalDate:yyyy-MM-dd} to preserve history.", "Saved & Duplicated", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    Else
+                        ' Date unchanged — update the original record normally
+                        hearing.Hearing1 = hearing1Text.Text.Trim()
+                        hearing.Hearing2 = hearing2Text.Text.Trim()
+                        hearing.NextHearing = selectedDate
+                        repository.UpdateHearing(hearing)
+
+                        ReloadCalendar()
+                        DisplayHearing(hearing)
+
+                        ' Re-enable the button after success
+                        saveBtn.Enabled = True
+
+                        MessageBox.Show(dlg, "Hearing changes saved successfully.", "Saved", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                    End If
+
                 Catch ex As Exception
-                    MessageBox.Show(dlg, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                    ' Re-enable so the user can try again (e.g. after closing a locked file)
+                    saveBtn.Enabled = True
+                    MessageBox.Show(dlg, ex.Message, "Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
                 End Try
             End Sub
 
@@ -862,6 +1004,45 @@ Public Class Form1
             bodyPanel.Controls.Add(grid, 0, 0)
             bodyPanel.Controls.Add(divLine, 0, 1)
             bodyPanel.Controls.Add(btnPanel, 0, 2)
+
+            ' ── History Log Section ─────────────────────────────────────
+            If hearing.HistoryLog IsNot Nothing Then
+                Dim historySpacer As New Panel With {
+                    .Dock = DockStyle.Fill,
+                    .BackColor = Color.Transparent
+                }
+                bodyPanel.Controls.Add(historySpacer, 0, 3)
+
+                Dim historyContainer As New Panel With {
+                    .Dock = DockStyle.Fill,
+                    .BackColor = Color.FromArgb(250, 251, 253),
+                    .Padding = New Padding(10, 8, 10, 8),
+                    .Margin = New Padding(0)
+                }
+                AddHandler historyContainer.Paint, Sub(s, ev)
+                                                       Dim rect = New Rectangle(0, 0, historyContainer.Width - 1, historyContainer.Height - 1)
+                                                       ev.Graphics.DrawRectangle(New Pen(Color.FromArgb(218, 226, 236)), rect)
+                                                   End Sub
+
+                Dim historyTitle As New Label With {
+                    .Text = "📋  HISTORY LOG",
+                    .Dock = DockStyle.Top,
+                    .Height = 22,
+                    .ForeColor = Color.FromArgb(96, 108, 123),
+                    .Font = New Font("Segoe UI", 8.0F, FontStyle.Bold),
+                    .Padding = New Padding(0, 0, 0, 4)
+                }
+
+                ' Add history entries in reverse chronological order (newest first)
+                historyList.Items.Clear()
+                For i = hearing.HistoryLog.Count - 1 To 0 Step -1
+                    historyList.Items.Add(hearing.HistoryLog(i))
+                Next
+
+                historyContainer.Controls.Add(historyList)
+                historyContainer.Controls.Add(historyTitle)
+                bodyPanel.Controls.Add(historyContainer, 0, 4)
+            End If
 
             ' Main layout to prevent overlap between header and scroll body
             Dim mainLayout As New TableLayoutPanel With {
@@ -887,25 +1068,42 @@ Public Class Form1
 
     Private Sub RefreshSideList()
         Dim searchText = searchTextBox.Text.Trim()
-        Dim filtered = hearings.Where(Function(hearing)
-            Dim matchesSearch = Not String.IsNullOrWhiteSpace(searchText) AndAlso
-                hearing.NameOfPdl.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0
-            Dim matchesDate = String.IsNullOrWhiteSpace(searchText) AndAlso hearing.NextHearing.Date = selectedDate.Date
-            Return matchesDate OrElse matchesSearch
-        End Function).
-            OrderBy(Function(hearing) hearing.NextHearing).
-            ThenBy(Function(hearing) hearing.NameOfPdl).
-            ToList()
+        Dim filtered As List(Of HearingRecord)
 
-        If String.IsNullOrWhiteSpace(searchText) Then
-            dateListTitleLabel.Text = $"Hearings on {selectedDate:yyyy-MM-dd} ({filtered.Count})"
-        Else
+        If Not String.IsNullOrWhiteSpace(searchText) Then
+            ' Search mode: filter by name across all hearings
+            filtered = hearings.Where(Function(h)
+                Return h.NameOfPdl.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0
+            End Function).
+                OrderBy(Function(h) h.NextHearing).
+                ThenBy(Function(h) h.NameOfPdl).
+                ToList()
             dateListTitleLabel.Text = $"Search results ({filtered.Count})"
+
+        ElseIf dateWasClicked Then
+            ' Date selected mode: show only that date's hearings
+            filtered = hearings.Where(Function(h)
+                Return h.NextHearing.Date = selectedDate.Date
+            End Function).
+                OrderBy(Function(h) h.NameOfPdl).
+                ToList()
+            dateListTitleLabel.Text = $"Hearings on {selectedDate:yyyy-MM-dd} ({filtered.Count})"
+
+        Else
+            ' Default mode: show all upcoming hearings sorted by next hearing date
+            filtered = hearings.Where(Function(h)
+                Return h.NextHearing <> Date.MinValue
+            End Function).
+                OrderBy(Function(h) h.NextHearing).
+                ThenBy(Function(h) h.NameOfPdl).
+                ToList()
+            dateListTitleLabel.Text = $"All Scheduled Hearings ({filtered.Count})"
         End If
+
         hearingListBox.BeginUpdate()
         hearingListBox.Items.Clear()
-        For Each hearing In filtered
-            hearingListBox.Items.Add(hearing)
+        For Each h In filtered
+            hearingListBox.Items.Add(h)
         Next
         hearingListBox.EndUpdate()
 
@@ -916,6 +1114,7 @@ Public Class Form1
         End If
     End Sub
 
+
     Private Sub FormatHearingListItem(sender As Object, e As ListControlConvertEventArgs)
         Dim hearing = TryCast(e.ListItem, HearingRecord)
         If hearing IsNot Nothing Then
@@ -924,18 +1123,62 @@ Public Class Form1
     End Sub
 
     Private Sub ImportDataFile()
-        Using dialog As New OpenFileDialog()
-            dialog.Title = "Import hearing data"
-            dialog.Filter = "Excel or XML files (*.xlsx;*.xlsm;*.xml)|*.xlsx;*.xlsm;*.xml"
-            If dialog.ShowDialog(Me) <> DialogResult.OK Then
+        ' ── Step 1: Ask user where to save a backup of current data ──────────
+        Dim backupPath As String = ""
+        Using saveDlg As New SaveFileDialog()
+            saveDlg.Title = "Save backup of current data before importing"
+            saveDlg.Filter = "Excel Workbook (*.xlsx)|*.xlsx"
+            saveDlg.FileName = $"hearings_backup_{DateTime.Now:yyyy-MM-dd}"
+            saveDlg.DefaultExt = "xlsx"
+            saveDlg.OverwritePrompt = True
+
+            Dim saveResult = saveDlg.ShowDialog(Me)
+            If saveResult = DialogResult.Cancel Then
+                Return  ' User cancelled entirely
+            End If
+            If saveResult = DialogResult.OK Then
+                backupPath = saveDlg.FileName
+            End If
+        End Using
+
+        ' ── Step 2: Pick the new XML / Excel file to import ───────────────────
+        Using openDlg As New OpenFileDialog()
+            openDlg.Title = "Import hearing data"
+            openDlg.Filter = "Excel or XML files (*.xlsx;*.xlsm;*.xml)|*.xlsx;*.xlsm;*.xml"
+            If openDlg.ShowDialog(Me) <> DialogResult.OK Then
                 Return
             End If
 
-            repository.ImportDataFile(dialog.FileName)
-            workbookValueLabel.Text = repository.WorkbookPath
-            ReloadCalendar()
-            Dim scheduledCount = repository.CountSchedulableHearings()
-            MessageBox.Show(Me, $"Data imported and saved to the application Excel file.{Environment.NewLine}{scheduledCount} hearing(s) have a valid NEXT HEARING date and can appear on the calendar.", "Import Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Try
+                ' Save backup to user-chosen location (if they gave one)
+                If Not String.IsNullOrEmpty(backupPath) Then
+                    repository.BackupCurrentData(backupPath)
+                End If
+
+                ' Import the new file (replaces hearings.xlsx)
+                repository.ImportDataFile(openDlg.FileName)
+                workbookValueLabel.Text = repository.WorkbookPath
+                ReloadCalendar()
+
+                Dim scheduledCount = repository.CountSchedulableHearings()
+
+                Dim backupNote As String = If(Not String.IsNullOrEmpty(backupPath),
+                    $"{Environment.NewLine}{Environment.NewLine}✔ Previous data backed up to:{Environment.NewLine}  {backupPath}",
+                    "")
+
+                MessageBox.Show(Me,
+                    $"Import complete! {scheduledCount} hearing(s) now have a valid Next Hearing date." & backupNote,
+                    "Import Complete",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information)
+
+            Catch ex As Exception
+                MessageBox.Show(Me,
+                    $"Import failed:{Environment.NewLine}{ex.Message}",
+                    "Import Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error)
+            End Try
         End Using
     End Sub
 
@@ -960,11 +1203,11 @@ Public Class Form1
             Dim topPanel As New Panel With {
                 .Dock = DockStyle.Top,
                 .Height = 50,
-                .BackColor = Color.FromArgb(18, 54, 93)
+                .BackColor = Color.FromArgb(242, 201, 76)
             }
             Dim headerLbl As New Label With {
                 .Text = "Select Export Range",
-                .ForeColor = Color.White,
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .Font = New Font("Segoe UI Semibold", 12.0F),
                 .TextAlign = ContentAlignment.MiddleCenter,
                 .Dock = DockStyle.Fill
@@ -1024,8 +1267,8 @@ Public Class Form1
                 .DialogResult = DialogResult.OK,
                 .Dock = DockStyle.Right,
                 .Width = 100,
-                .BackColor = Color.FromArgb(18, 54, 93),
-                .ForeColor = Color.White,
+                .BackColor = Color.FromArgb(242, 201, 76),
+                .ForeColor = Color.FromArgb(31, 41, 55),
                 .FlatStyle = FlatStyle.Flat
             }
             btnOk.FlatAppearance.BorderSize = 0

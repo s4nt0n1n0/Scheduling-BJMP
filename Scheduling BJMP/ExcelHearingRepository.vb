@@ -6,6 +6,7 @@ Imports System.Xml.Linq
 Public Class ExcelHearingRepository
     Private Const SheetName As String = "Hearings"
     Private ReadOnly _workbookPath As String
+    Private ReadOnly _backupDirectory As String
 
     Private Class HeaderLocation
         Public Property Row As Integer
@@ -26,6 +27,8 @@ Public Class ExcelHearingRepository
         Dim dataDirectory = Path.Combine(AppContext.BaseDirectory, "Data")
         Directory.CreateDirectory(dataDirectory)
         _workbookPath = Path.Combine(dataDirectory, "hearings.xlsx")
+        _backupDirectory = Path.Combine(dataDirectory, "Backups")
+        Directory.CreateDirectory(_backupDirectory)
         EnsureWorkbook()
     End Sub
 
@@ -34,6 +37,24 @@ Public Class ExcelHearingRepository
             Return _workbookPath
         End Get
     End Property
+
+    Public ReadOnly Property BackupDirectory As String
+        Get
+            Return _backupDirectory
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Returns all backup files sorted newest-first.
+    ''' </summary>
+    Public Function ListBackups() As String()
+        If Not Directory.Exists(_backupDirectory) Then
+            Return Array.Empty(Of String)()
+        End If
+        Return Directory.GetFiles(_backupDirectory, "hearings_backup_*.xlsx").
+            OrderByDescending(Function(f) f).
+            ToArray()
+    End Function
 
     Public Function LoadHearings() As List(Of HearingRecord)
         EnsureWorkbook()
@@ -129,16 +150,33 @@ Public Class ExcelHearingRepository
         End Using
     End Sub
 
-    Public Sub ImportDataFile(sourcePath As String)
-        Dim extension = Path.GetExtension(sourcePath).ToLowerInvariant()
-        Select Case extension
-            Case ".xlsx", ".xlsm"
-                ImportWorkbook(sourcePath)
-            Case ".xml"
-                ImportSpreadsheetXml(sourcePath)
-            Case Else
-                Throw New InvalidOperationException("Please import an Excel .xlsx/.xlsm file or an Excel XML .xml file.")
-        End Select
+
+    ''' <summary>
+    ''' Automatically backs up the current workbook to the internal Backups folder with a timestamped filename.
+    ''' </summary>
+    Public Sub BackupCurrentData()
+        Dim filename = "hearings_backup_" & DateTime.Now.ToString("yyyyMMdd_HHmmss") & ".xlsx"
+        Dim destinationPath = Path.Combine(_backupDirectory, filename)
+        BackupCurrentData(destinationPath)
+    End Sub
+
+    ''' <summary>
+    ''' Copies the current hearings.xlsx to the destination path chosen by the user.
+    ''' Safe to call even if the workbook does not yet exist.
+    ''' </summary>
+    ''' <param name="destinationPath">Full file path where the backup should be saved.</param>
+    Public Sub BackupCurrentData(destinationPath As String)
+        If Not File.Exists(_workbookPath) Then
+            Return  ' Nothing to back up
+        End If
+
+        ' Make sure the destination folder exists
+        Dim destDir = Path.GetDirectoryName(destinationPath)
+        If Not String.IsNullOrEmpty(destDir) Then
+            Directory.CreateDirectory(destDir)
+        End If
+
+        File.Copy(_workbookPath, destinationPath, overwrite:=True)
     End Sub
 
     Public Function CountSchedulableHearings() As Integer
@@ -166,29 +204,90 @@ Public Class ExcelHearingRepository
         End Using
     End Sub
 
-    Private Sub ImportWorkbook(path As String)
-        Dim allImportedRows As New List(Of List(Of String))()
-        Dim hasFoundAnyHeader As Boolean = False
+    Public Sub ImportDataFile(sourcePath As String)
+        ' ── Auto-backup current data before modifying it ──────────────────────
+        BackupCurrentData()
+
+        Dim extension = Path.GetExtension(sourcePath).ToLowerInvariant()
+        Dim importedList As List(Of HearingRecord) = Nothing
+
+        Select Case extension
+            Case ".xlsx", ".xlsm"
+                importedList = ParseWorkbook(sourcePath)
+            Case ".xml"
+                importedList = ParseSpreadsheetXml(sourcePath)
+            Case Else
+                Throw New InvalidOperationException("Please import an Excel .xlsx/.xlsm file or an Excel XML .xml file.")
+        End Select
+
+        If importedList Is Nothing OrElse importedList.Count = 0 Then
+            Return
+        End If
+
+        ' Load existing active hearings to merge against
+        Dim existingList = LoadHearings()
+        Dim mergedCount = 0
+
+        Using workbook As New XLWorkbook(_workbookPath)
+            Dim worksheet = workbook.Worksheet(SheetName)
+            Dim mapping = FindColumnMapping(worksheet)
+            Dim currentLastRow = LastUsedRowNumber(worksheet)
+
+            For Each newH In importedList
+                ' Check if duplicate: same Case Number AND Name of PDL
+                Dim duplicate = existingList.FirstOrDefault(Function(x) 
+                    Return x.No.Trim().Equals(newH.No.Trim(), StringComparison.OrdinalIgnoreCase) AndAlso
+                           x.NameOfPdl.Trim().Equals(newH.NameOfPdl.Trim(), StringComparison.OrdinalIgnoreCase)
+                End Function)
+
+                If duplicate IsNot Nothing Then
+                    ' DUPLICATE: Update existing hearing status/results in-place if they were blank, otherwise skip
+                    Dim rowId = duplicate.Id
+                    If String.IsNullOrWhiteSpace(worksheet.Cell(rowId, mapping.Hearing1Col).GetString()) Then
+                        worksheet.Cell(rowId, mapping.Hearing1Col).Value = newH.Hearing1
+                    End If
+                    If String.IsNullOrWhiteSpace(worksheet.Cell(rowId, mapping.Hearing2Col).GetString()) Then
+                        worksheet.Cell(rowId, mapping.Hearing2Col).Value = newH.Hearing2
+                    End If
+                    If newH.NextHearing <> Date.MinValue AndAlso duplicate.NextHearing = Date.MinValue Then
+                        worksheet.Cell(rowId, mapping.NextHearingCol).Value = newH.NextHearing.Date
+                        worksheet.Cell(rowId, mapping.NextHearingCol).Style.DateFormat.Format = "yyyy-mm-dd"
+                    End If
+                Else
+                    ' NOT DUPLICATE: Append new row to existing Excel sheet
+                    currentLastRow += 1
+                    newH.Id = currentLastRow
+                    WriteHearing(worksheet, currentLastRow, newH, mapping)
+                    existingList.Add(newH)
+                    mergedCount += 1
+                End If
+            Next
+
+            workbook.Save()
+        End Using
+    End Sub
+
+    Private Function ParseWorkbook(path As String) As List(Of HearingRecord)
+        Dim parsedList As New List(Of HearingRecord)()
 
         Using workbook As New XLWorkbook(path)
             For Each worksheet In workbook.Worksheets
                 Dim mapping = FindColumnMapping(worksheet)
                 If mapping.HeaderRow > 0 Then
                     Dim lastRow = LastUsedRowNumber(worksheet)
-                    Dim hasData As Boolean = False
-                    Dim tempRows As New List(Of List(Of String))()
+                    Dim currentDate As Date = Date.MinValue
 
                     For rowNumber = mapping.HeaderRow + 1 To lastRow
                         If worksheet.Row(rowNumber).IsEmpty() Then
                             Continue For
                         End If
 
-                        Dim noVal = worksheet.Cell(rowNumber, mapping.NoCol).GetString()
-                        Dim nameVal = worksheet.Cell(rowNumber, mapping.NameCol).GetString()
-                        Dim courtVal = worksheet.Cell(rowNumber, mapping.CourtCol).GetString()
-                        Dim hearing1Val = worksheet.Cell(rowNumber, mapping.Hearing1Col).GetString()
-                        Dim hearing2Val = worksheet.Cell(rowNumber, mapping.Hearing2Col).GetString()
-                        Dim nextVal = worksheet.Cell(rowNumber, mapping.NextHearingCol).GetString()
+                        Dim noVal = worksheet.Cell(rowNumber, mapping.NoCol).GetString().Trim()
+                        Dim nameVal = worksheet.Cell(rowNumber, mapping.NameCol).GetString().Trim()
+                        Dim courtVal = worksheet.Cell(rowNumber, mapping.CourtCol).GetString().Trim()
+                        Dim hearing1Val = worksheet.Cell(rowNumber, mapping.Hearing1Col).GetString().Trim()
+                        Dim hearing2Val = worksheet.Cell(rowNumber, mapping.Hearing2Col).GetString().Trim()
+                        Dim nextVal = worksheet.Cell(rowNumber, mapping.NextHearingCol).GetString().Trim()
 
                         ' Check if it's a section date divider row
                         Dim col1To5Empty = String.IsNullOrWhiteSpace(nameVal) AndAlso
@@ -199,38 +298,34 @@ Public Class ExcelHearingRepository
 
                         Dim sectionDate As Date
                         If col1To5Empty AndAlso TryParseSectionDate(noVal, sectionDate) Then
-                            tempRows.Add(New List(Of String) From {noVal, "", "", "", "", ""})
+                            currentDate = sectionDate
                             Continue For
                         End If
 
                         ' Skip helper/header-like lines that are not actual hearing rows
-                        If String.IsNullOrWhiteSpace(nameVal) Then
-                            Continue For
+                        Dim hearingDate As Date = Date.MinValue
+                        If Not TryReadDate(worksheet.Cell(rowNumber, mapping.NextHearingCol), hearingDate) Then
+                            hearingDate = currentDate
                         End If
 
-                        tempRows.Add(New List(Of String) From {noVal, nameVal, courtVal, hearing1Val, hearing2Val, nextVal})
-                        hasData = True
+                        parsedList.Add(New HearingRecord With {
+                            .No = noVal,
+                            .NameOfPdl = nameVal,
+                            .BrCourt = courtVal,
+                            .Hearing1 = hearing1Val,
+                            .Hearing2 = hearing2Val,
+                            .NextHearing = hearingDate.Date
+                        })
                     Next
-
-                    If hasData OrElse tempRows.Count > 0 Then
-                        If Not hasFoundAnyHeader Then
-                            allImportedRows.Add(StandardHeaders().ToList())
-                            hasFoundAnyHeader = True
-                        End If
-                        allImportedRows.AddRange(tempRows)
-                    End If
                 End If
             Next
         End Using
 
-        If Not hasFoundAnyHeader Then
-            ThrowHeaderException()
-        End If
+        Return parsedList
+    End Function
 
-        SaveNormalizedWorkbook(allImportedRows)
-    End Sub
-
-    Private Sub ImportSpreadsheetXml(sourcePath As String)
+    Private Function ParseSpreadsheetXml(sourcePath As String) As List(Of HearingRecord)
+        Dim parsedList As New List(Of HearingRecord)()
         Dim document = XDocument.Load(sourcePath)
         Dim rows = document.Descendants().Where(Function(element) element.Name.LocalName = "Row").ToList()
         If rows.Count = 0 Then
@@ -294,21 +389,53 @@ Public Class ExcelHearingRepository
             ThrowHeaderException()
         End If
 
-        Dim normalizedRows As New List(Of List(Of String)) From {StandardHeaders().ToList()}
+        Dim currentDate As Date = Date.MinValue
         For rowIndex = headerRowIndex + 1 To importedRows.Count - 1
             Dim row = importedRows(rowIndex)
-            Dim noVal = If(mapping.NoCol < row.Count, row(mapping.NoCol), "")
-            Dim nameVal = If(mapping.NameCol < row.Count, row(mapping.NameCol), "")
-            Dim courtVal = If(mapping.CourtCol < row.Count, row(mapping.CourtCol), "")
-            Dim hearing1Val = If(mapping.Hearing1Col < row.Count, row(mapping.Hearing1Col), "")
-            Dim hearing2Val = If(mapping.Hearing2Col < row.Count, row(mapping.Hearing2Col), "")
-            Dim nextVal = If(mapping.NextHearingCol < row.Count, row(mapping.NextHearingCol), "")
+            Dim noVal = If(mapping.NoCol < row.Count, row(mapping.NoCol).Trim(), "")
+            Dim nameVal = If(mapping.NameCol < row.Count, row(mapping.NameCol).Trim(), "")
+            Dim courtVal = If(mapping.CourtCol < row.Count, row(mapping.CourtCol).Trim(), "")
+            Dim hearing1Val = If(mapping.Hearing1Col < row.Count, row(mapping.Hearing1Col).Trim(), "")
+            Dim hearing2Val = If(mapping.Hearing2Col < row.Count, row(mapping.Hearing2Col).Trim(), "")
+            Dim nextVal = If(mapping.NextHearingCol < row.Count, row(mapping.NextHearingCol).Trim(), "")
 
-            normalizedRows.Add(New List(Of String) From {noVal, nameVal, courtVal, hearing1Val, hearing2Val, nextVal})
+            ' Check if it's a section date divider row
+            Dim col1To5Empty = String.IsNullOrWhiteSpace(nameVal) AndAlso
+                               String.IsNullOrWhiteSpace(courtVal) AndAlso
+                               String.IsNullOrWhiteSpace(hearing1Val) AndAlso
+                               String.IsNullOrWhiteSpace(hearing2Val) AndAlso
+                               String.IsNullOrWhiteSpace(nextVal)
+
+            Dim sectionDate As Date
+            If col1To5Empty AndAlso TryParseSectionDate(noVal, sectionDate) Then
+                currentDate = sectionDate
+                Continue For
+            End If
+
+            ' Skip helper/header-like lines that are not actual hearing rows
+            If String.IsNullOrWhiteSpace(nameVal) Then
+                Continue For
+            End If
+
+            Dim hearingDate As Date = Date.MinValue
+            ' Parse exact date
+            If Not Date.TryParse(nextVal, CultureInfo.CurrentCulture, DateTimeStyles.None, hearingDate) AndAlso
+               Not Date.TryParse(nextVal, CultureInfo.InvariantCulture, DateTimeStyles.None, hearingDate) Then
+                hearingDate = currentDate
+            End If
+
+            parsedList.Add(New HearingRecord With {
+                .No = noVal,
+                .NameOfPdl = nameVal,
+                .BrCourt = courtVal,
+                .Hearing1 = hearing1Val,
+                .Hearing2 = hearing2Val,
+                .NextHearing = hearingDate.Date
+            })
         Next
 
-        SaveNormalizedWorkbook(normalizedRows)
-    End Sub
+        Return parsedList
+    End Function
 
     Private Shared Function ReadXmlRow(row As XElement) As List(Of String)
         Dim values As New List(Of String)()

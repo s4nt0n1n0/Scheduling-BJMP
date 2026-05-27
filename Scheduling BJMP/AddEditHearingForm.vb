@@ -24,7 +24,7 @@ Public Class AddEditHearingForm
         Dim titleLabel As New Label With {
             .Text = "Hearing Information",
             .Font = New Font("Segoe UI Semibold", 15.0F),
-            .ForeColor = Color.FromArgb(18, 54, 93),
+            .ForeColor = Color.FromArgb(31, 41, 55),
             .Location = New Point(24, 20),
             .AutoSize = True
         }
@@ -57,8 +57,8 @@ Public Class AddEditHearingForm
 
         Dim saveButton As New Button With {
             .Text = "Save",
-            .BackColor = Color.FromArgb(18, 54, 93),
-            .ForeColor = Color.White,
+            .BackColor = Color.FromArgb(242, 201, 76),
+            .ForeColor = Color.FromArgb(31, 41, 55),
             .FlatStyle = FlatStyle.Flat,
             .Location = New Point(376, 350),
             .Size = New Size(90, 36),

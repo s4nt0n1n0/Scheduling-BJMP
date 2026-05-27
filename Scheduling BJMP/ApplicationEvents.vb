@@ -1,4 +1,4 @@
-﻿Imports Microsoft.VisualBasic.ApplicationServices
+Imports Microsoft.VisualBasic.ApplicationServices
 
 Namespace My
     ' The following events are available for MyApplication:
@@ -24,6 +24,10 @@ Namespace My
     ' End Sub
 
     Partial Friend Class MyApplication
-
+        Private Sub MyApplication_UnhandledException(sender As Object, e As UnhandledExceptionEventArgs) Handles Me.UnhandledException
+            e.ExitApplication = False ' Keep application running if possible
+            Dim errMsg = $"An unhandled exception occurred:{Environment.NewLine}{Environment.NewLine}{e.Exception.Message}{Environment.NewLine}{Environment.NewLine}Stack Trace:{Environment.NewLine}{e.Exception.StackTrace}"
+            MsgBox(errMsg, MsgBoxStyle.Critical, "Unhandled Application Error")
+        End Sub
     End Class
 End Namespace

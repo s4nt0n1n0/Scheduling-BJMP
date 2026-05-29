@@ -7,16 +7,16 @@
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <style>
         :root {
-            --bjmp-blue: #12365d;
-            --bjmp-gold: #f2c94c;
-            --panel-border: #d9e1ea;
-            --text: #1f2937;
+            --bjmp-blue: #4C1D95;
+            --bjmp-gold: #F59E0B;
+            --panel-border: #DDD6FE;
+            --text: #1E1B4B;
         }
 
         html, body {
             height: 100%;
             margin: 0;
-            background: #f3f6fa;
+            background: #F5F3FF;
             color: var(--text);
             font-family: "Segoe UI", Arial, sans-serif;
         }
@@ -60,7 +60,7 @@
             border-radius: 8px;
             padding: 18px;
             min-height: calc(100vh - 112px);
-            box-shadow: 0 10px 28px rgba(15, 35, 60, .08);
+            box-shadow: 0 10px 28px rgba(76, 29, 149, .10);
         }
 
             .fc .fc-toolbar-title {
@@ -78,13 +78,13 @@
             }
 
             .fc .fc-daygrid-day-number {
-                color: #344052;
+                color: #1E1B4B;
                 font-weight: 600;
                 padding: 8px;
             }
 
             .fc .fc-col-header-cell {
-                background: #eef3f8;
+                background: #EDE9FE;
                 color: var(--bjmp-blue);
                 padding: 8px 0;
                 font-weight: 700;
@@ -97,13 +97,13 @@
             padding: 3px 5px;
             font-weight: 600;
             cursor: grab;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, .12);
+            box-shadow: 0 2px 5px rgba(76, 29, 149, .15);
             transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
 
             .fc-event:hover {
                 transform: translateY(-1px);
-                box-shadow: 0 4px 10px rgba(0, 0, 0, .2);
+                box-shadow: 0 4px 10px rgba(76, 29, 149, .25);
             }
 
             .fc-event:active {
@@ -112,7 +112,7 @@
             }
 
         .fc-daygrid-day:hover {
-            background: #fffdf5;
+            background: #FAF9FF;
         }
 
         /* Person count badge on each date cell */
@@ -129,7 +129,7 @@
             height: 20px;
             margin-left: 6px;
             vertical-align: middle;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+            box-shadow: 0 1px 3px rgba(76,29,149,0.18);
         }
 
         /* Style the +N more link to look like a button */
@@ -145,8 +145,9 @@
 
         /* Today highlight */
         .fc .fc-day-today {
-            background: #fffbe6 !important;
+            background: #FEF9C3 !important;
         }
+
 
         /* Hide events and more links in month view to keep it clean and only show the count badge */
         .fc-dayGridMonth-view .fc-daygrid-event,
@@ -154,6 +155,54 @@
         .fc-dayGridMonth-view .fc-daygrid-more-link {
             display: none !important;
         }
+
+        .pdl-highlight {
+            background-color: #FEF3C7 !important;
+            box-shadow: inset 0 0 0 2px #F59E0B !important;
+        }
+
+        .legend {
+            display: flex;
+            gap: 16px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(76, 29, 149, 0.10);
+            padding: 5px 12px;
+            border-radius: 20px;
+            color: var(--bjmp-blue);
+        }
+
+        .legend-badge {
+            display: inline-block;
+            border-radius: 50%;
+        }
+
+        .badge-count {
+            background: var(--bjmp-gold);
+            color: var(--bjmp-blue);
+            text-align: center;
+            font-size: 9px;
+            font-weight: 800;
+            line-height: 14px;
+            width: 14px;
+            height: 14px;
+            box-shadow: 0 1px 3px rgba(76,29,149,0.15);
+        }
+
+        .badge-highlight {
+            background-color: #FEF3C7;
+            border: 2px solid #F59E0B;
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+        }
+
     </style>
 </head>
 <body>
@@ -163,6 +212,16 @@
                 <div class="agency">BJMP Hearing Scheduling Dashboard</div>
                 <div class="subtitle">Excel-backed calendar management</div>
             </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <span class="legend-badge badge-count">#</span>
+                    <span>Daily Hearing Count</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-badge badge-highlight"></span>
+                    <span>Selected Person's Hearings</span>
+                </div>
+            </div>
         </header>
         <main id="calendar"></main>
     </div>
@@ -170,6 +229,23 @@
     <script>
         let calendar;
         let currentEvents = [];
+        let highlightedDates = [];
+
+        window.highlightPdlHearings = function (dates) {
+            // Remove previous highlights
+            document.querySelectorAll('.pdl-highlight').forEach(el => {
+                el.classList.remove('pdl-highlight');
+            });
+            highlightedDates = dates || [];
+            if (highlightedDates.length === 0) return;
+            // Add highlights to dates
+            highlightedDates.forEach(dateStr => {
+                const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+                if (cell) {
+                    cell.classList.add('pdl-highlight');
+                }
+            });
+        };
 
         function post(message) {
             if (window.chrome && window.chrome.webview) {
@@ -277,6 +353,9 @@
                     if (info.view.type === 'dayGridMonth') {
                         setTimeout(updatePersonCounts, 150);
                     }
+                    setTimeout(function() {
+                        highlightPdlHearings(highlightedDates);
+                    }, 160);
                 }
             });
 

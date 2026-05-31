@@ -61,11 +61,15 @@ Public Class ExcelHearingRepository
             Return
         End If
 
-        Dim doc As New XDocument(
-            New XDeclaration("1.0", "utf-8", "yes"),
-            New XElement("Hearings")
-        )
-        doc.Save(_workbookPath)
+        Try
+            Dim doc As New XDocument(
+                New XDeclaration("1.0", "utf-8", "yes"),
+                New XElement("Hearings")
+            )
+            doc.Save(_workbookPath)
+        Catch ex As Exception
+            Throw New IOException($"Unable to create the hearing data file at '{_workbookPath}'.", ex)
+        End Try
     End Sub
 
     Private Sub SaveHearings(hearings As List(Of HearingRecord))
@@ -93,18 +97,24 @@ Public Class ExcelHearingRepository
                 End Function)
             )
         )
-        
+
         Dim retries As Integer = 5
+        Dim lastError As IOException = Nothing
         While retries > 0
             Try
                 doc.Save(_workbookPath)
                 Exit Sub
             Catch ex As IOException
+                lastError = ex
                 retries -= 1
-                If retries <= 0 Then Throw
+                If retries <= 0 Then Exit While
                 System.Threading.Thread.Sleep(100)
             End Try
         End While
+
+        If lastError IsNot Nothing Then
+            Throw New IOException($"Unable to save hearing data to '{_workbookPath}'.", lastError)
+        End If
     End Sub
 
     Public Function LoadHearings() As List(Of HearingRecord)
@@ -131,6 +141,13 @@ Public Class ExcelHearingRepository
                     record.NextHearing = nextHearingDate.Date
                 End If
 
+                Dim headerNames As String() = {"NAME OF PDL", "NAME", "NAMES OF PDL"}
+                Dim headerNos As String() = {"NO", "NO."}
+                If headerNames.Any(Function(h) record.NameOfPdl.Equals(h, StringComparison.OrdinalIgnoreCase)) OrElse
+                   headerNos.Any(Function(h) record.No.Equals(h, StringComparison.OrdinalIgnoreCase)) Then
+                    Continue For
+                End If
+
                 Dim historyEl = el.Element("HistoryLog")
                 If historyEl IsNot Nothing Then
                     For Each entryEl In historyEl.Elements("Log")
@@ -141,6 +158,7 @@ Public Class ExcelHearingRepository
                 hearings.Add(record)
             Next
         Catch ex As Exception
+            Throw New InvalidOperationException($"Failed to load hearing data from '{_workbookPath}'.", ex)
         End Try
 
         Return hearings
@@ -170,6 +188,30 @@ Public Class ExcelHearingRepository
         existing.HistoryLog = hearing.HistoryLog
         SaveHearings(hearings)
     End Sub
+
+    Public Function RenameHearings(oldName As String, newName As String) As Integer
+        Dim trimmedOld = If(oldName, "").Trim()
+        Dim trimmedNew = If(newName, "").Trim()
+        If String.IsNullOrWhiteSpace(trimmedOld) OrElse String.Equals(trimmedOld, trimmedNew, StringComparison.OrdinalIgnoreCase) Then
+            Return 0
+        End If
+
+        Dim hearings = LoadHearings()
+        Dim updatedCount = 0
+
+        For Each hearing In hearings
+            If String.Equals(If(hearing.NameOfPdl, "").Trim(), trimmedOld, StringComparison.OrdinalIgnoreCase) Then
+                hearing.NameOfPdl = trimmedNew
+                updatedCount += 1
+            End If
+        Next
+
+        If updatedCount > 0 Then
+            SaveHearings(hearings)
+        End If
+
+        Return updatedCount
+    End Function
 
     Public Sub MoveHearing(rowId As Integer, nextHearing As Date)
         Dim hearings = LoadHearings()
@@ -208,12 +250,16 @@ Public Class ExcelHearingRepository
             Return
         End If
 
-        Dim destDir = Path.GetDirectoryName(destinationPath)
-        If Not String.IsNullOrEmpty(destDir) Then
-            Directory.CreateDirectory(destDir)
-        End If
+        Try
+            Dim destDir = Path.GetDirectoryName(destinationPath)
+            If Not String.IsNullOrEmpty(destDir) Then
+                Directory.CreateDirectory(destDir)
+            End If
 
-        File.Copy(_workbookPath, destinationPath, overwrite:=True)
+            File.Copy(_workbookPath, destinationPath, overwrite:=True)
+        Catch ex As Exception
+            Throw New IOException($"Failed to create a backup at '{destinationPath}'.", ex)
+        End Try
     End Sub
 
     Public Function CountSchedulableHearings() As Integer
@@ -221,47 +267,51 @@ Public Class ExcelHearingRepository
     End Function
 
     Public Sub ImportDataFile(sourcePath As String)
-        BackupCurrentData()
+        Try
+            BackupCurrentData()
 
-        Dim extension = Path.GetExtension(sourcePath).ToLowerInvariant()
-        Dim importedList As List(Of HearingRecord) = Nothing
+            Dim extension = Path.GetExtension(sourcePath).ToLowerInvariant()
+            Dim importedList As List(Of HearingRecord) = Nothing
 
-        Select Case extension
-            Case ".xlsx", ".xlsm"
-                importedList = ParseWorkbook(sourcePath)
-            Case ".xml"
-                importedList = ParseXmlOrSpreadsheetXml(sourcePath)
-            Case Else
-                Throw New InvalidOperationException("Please import an Excel .xlsx/.xlsm file or an XML .xml file.")
-        End Select
+            Select Case extension
+                Case ".xlsx", ".xlsm"
+                    importedList = ParseWorkbook(sourcePath)
+                Case ".xml"
+                    importedList = ParseXmlOrSpreadsheetXml(sourcePath)
+                Case Else
+                    Throw New InvalidOperationException("Please import an Excel .xlsx/.xlsm file or an XML .xml file.")
+            End Select
 
-        If importedList Is Nothing OrElse importedList.Count = 0 Then
-            Return
-        End If
-
-        Dim existingList = LoadHearings()
-
-        For Each newH In importedList
-            ' A record is only a duplicate if BOTH CaseNo AND NextHearing date match.
-            ' This allows the same person to have multiple hearings on different dates.
-            Dim duplicate = existingList.FirstOrDefault(Function(x)
-                Dim sameNo = Not String.IsNullOrWhiteSpace(x.No) AndAlso
-                             Not String.IsNullOrWhiteSpace(newH.No) AndAlso
-                             x.No.Trim().Equals(newH.No.Trim(), StringComparison.OrdinalIgnoreCase)
-                Dim sameDate = x.NextHearing <> Date.MinValue AndAlso
-                               newH.NextHearing <> Date.MinValue AndAlso
-                               x.NextHearing.Date = newH.NextHearing.Date
-                Return sameNo AndAlso sameDate
-            End Function)
-
-            If duplicate Is Nothing Then
-                Dim nextId = If(existingList.Count > 0, existingList.Max(Function(h) h.Id) + 1, 1)
-                newH.Id = nextId
-                existingList.Add(newH)
+            If importedList Is Nothing OrElse importedList.Count = 0 Then
+                Return
             End If
-        Next
 
-        SaveHearings(existingList)
+            Dim existingList = LoadHearings()
+
+            For Each newH In importedList
+                ' A record is only a duplicate if BOTH CaseNo AND NextHearing date match.
+                ' This allows the same person to have multiple hearings on different dates.
+                Dim duplicate = existingList.FirstOrDefault(Function(x)
+                    Dim sameNo = Not String.IsNullOrWhiteSpace(x.No) AndAlso
+                                 Not String.IsNullOrWhiteSpace(newH.No) AndAlso
+                                 x.No.Trim().Equals(newH.No.Trim(), StringComparison.OrdinalIgnoreCase)
+                    Dim sameDate = x.NextHearing <> Date.MinValue AndAlso
+                                   newH.NextHearing <> Date.MinValue AndAlso
+                                   x.NextHearing.Date = newH.NextHearing.Date
+                    Return sameNo AndAlso sameDate
+                End Function)
+
+                If duplicate Is Nothing Then
+                    Dim nextId = If(existingList.Count > 0, existingList.Max(Function(h) h.Id) + 1, 1)
+                    newH.Id = nextId
+                    existingList.Add(newH)
+                End If
+            Next
+
+            SaveHearings(existingList)
+        Catch ex As Exception
+            Throw New InvalidOperationException($"Failed to import hearing data from '{sourcePath}'.", ex)
+        End Try
     End Sub
 
     Private Function ParseWorkbook(path As String) As List(Of HearingRecord)
@@ -285,6 +335,14 @@ Public Class ExcelHearingRepository
                         Dim hearing1Val = worksheet.Cell(rowNumber, mapping.Hearing1Col).GetString().Trim()
                         Dim hearing2Val = worksheet.Cell(rowNumber, mapping.Hearing2Col).GetString().Trim()
                         Dim nextVal = worksheet.Cell(rowNumber, mapping.NextHearingCol).GetString().Trim()
+
+                        ' Skip any repeated header rows that appear inside the worksheet data.
+                        Dim headerNames As String() = {"NAME OF PDL", "NAME", "NAMES OF PDL"}
+                        Dim headerNos As String() = {"NO", "NO."}
+                        If headerNames.Any(Function(h) nameVal.Equals(h, StringComparison.OrdinalIgnoreCase)) OrElse
+                           headerNos.Any(Function(h) noVal.Equals(h, StringComparison.OrdinalIgnoreCase)) Then
+                            Continue For
+                        End If
 
                         Dim col1To5Empty = String.IsNullOrWhiteSpace(nameVal) AndAlso
                                            String.IsNullOrWhiteSpace(courtVal) AndAlso
@@ -701,14 +759,19 @@ Public Class ExcelHearingRepository
     End Function
 
     Public Sub ClearHearings(predicate As Func(Of HearingRecord, Boolean))
+        If predicate Is Nothing Then
+            Throw New ArgumentNullException(NameOf(predicate))
+        End If
+
         Dim hearings = LoadHearings()
         hearings.RemoveAll(Function(h) predicate(h))
         SaveHearings(hearings)
     End Sub
 
     Public Sub ExportToExcel(destPath As String)
-        Dim hearings = LoadHearings()
-        Dim templatePath = Path.Combine(AppContext.BaseDirectory, "Data", "hearings.xlsx")
+        Try
+            Dim hearings = LoadHearings()
+            Dim templatePath = Path.Combine(AppContext.BaseDirectory, "Data", "hearings.xlsx")
         
         ' Filter and group hearings by Month Year (excluding MinValue)
         Dim groupedHearings = hearings.
@@ -718,7 +781,7 @@ Public Class ExcelHearingRepository
             ThenBy(Function(g) g.Key.Month).
             ToList()
 
-        If File.Exists(templatePath) Then
+            If File.Exists(templatePath) Then
             Using workbook As New XLWorkbook(templatePath)
                 Dim templateSheet = workbook.Worksheet(SheetName)
                 Dim mapping = FindColumnMapping(templateSheet)
@@ -791,9 +854,9 @@ Public Class ExcelHearingRepository
                 
                 workbook.SaveAs(destPath)
             End Using
-        Else
-            ' Fallback if template is not found (highly resilient)
-            Using workbook As New XLWorkbook()
+            Else
+                ' Fallback if template is not found (highly resilient)
+                Using workbook As New XLWorkbook()
                 If groupedHearings.Count > 0 Then
                     For Each g In groupedHearings
                         Dim sheetName = New DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMMM yyyy", CultureInfo.InvariantCulture)
@@ -840,25 +903,32 @@ Public Class ExcelHearingRepository
                     worksheet.Range(1, 1, 1, 6).Style.Font.FontColor = XLColor.White
                     worksheet.Columns().AdjustToContents()
                 End If
-                workbook.SaveAs(destPath)
-            End Using
-        End If
+                    workbook.SaveAs(destPath)
+                End Using
+            End If
+        Catch ex As Exception
+            Throw New IOException($"Failed to export hearing data to Excel at '{destPath}'.", ex)
+        End Try
     End Sub
 
     Public Sub ExportToCsv(destPath As String)
-        Dim hearings = LoadHearings()
-        Using writer As New StreamWriter(destPath, False, System.Text.Encoding.UTF8)
-            writer.WriteLine("""NO"",""NAME OF PDL"",""BR/COURT"",""HEARING"",""HEARING"",""NEXT HEARING""")
-            For Each h In hearings
-                Dim noEscaped = If(h.No IsNot Nothing, h.No.Replace("""", """"""), "")
-                Dim nameEscaped = If(h.NameOfPdl IsNot Nothing, h.NameOfPdl.Replace("""", """"""), "")
-                Dim courtEscaped = If(h.BrCourt IsNot Nothing, h.BrCourt.Replace("""", """"""), "")
-                Dim h1Escaped = If(h.Hearing1 IsNot Nothing, h.Hearing1.Replace("""", """"""), "")
-                Dim h2Escaped = If(h.Hearing2 IsNot Nothing, h.Hearing2.Replace("""", """"""), "")
-                Dim nextHearingStr = If(h.NextHearing = Date.MinValue, "", h.NextHearing.ToString("yyyy-MM-dd"))
-                writer.WriteLine($"""{noEscaped}"",""{nameEscaped}"",""{courtEscaped}"",""{h1Escaped}"",""{h2Escaped}"",""{nextHearingStr}""")
-            Next
-        End Using
+        Try
+            Dim hearings = LoadHearings()
+            Using writer As New StreamWriter(destPath, False, System.Text.Encoding.UTF8)
+                writer.WriteLine("""NO"",""NAME OF PDL"",""BR/COURT"",""HEARING"",""HEARING"",""NEXT HEARING""")
+                For Each h In hearings
+                    Dim noEscaped = If(h.No IsNot Nothing, h.No.Replace("""", """"""), "")
+                    Dim nameEscaped = If(h.NameOfPdl IsNot Nothing, h.NameOfPdl.Replace("""", """"""), "")
+                    Dim courtEscaped = If(h.BrCourt IsNot Nothing, h.BrCourt.Replace("""", """"""), "")
+                    Dim h1Escaped = If(h.Hearing1 IsNot Nothing, h.Hearing1.Replace("""", """"""), "")
+                    Dim h2Escaped = If(h.Hearing2 IsNot Nothing, h.Hearing2.Replace("""", """"""), "")
+                    Dim nextHearingStr = If(h.NextHearing = Date.MinValue, "", h.NextHearing.ToString("yyyy-MM-dd"))
+                    writer.WriteLine($"""{noEscaped}"",""{nameEscaped}"",""{courtEscaped}"",""{h1Escaped}"",""{h2Escaped}"",""{nextHearingStr}""")
+                Next
+            End Using
+        Catch ex As Exception
+            Throw New IOException($"Failed to export hearing data to CSV at '{destPath}'.", ex)
+        End Try
     End Sub
 
 End Class

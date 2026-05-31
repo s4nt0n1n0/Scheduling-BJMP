@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -8,7 +8,7 @@
     <style>
         :root {
             --bjmp-blue: #4C1D95;
-            --bjmp-gold: #F59E0B;
+            --bjmp-gold: #FBBF24;
             --panel-border: #DDD6FE;
             --text: #1E1B4B;
         }
@@ -16,7 +16,7 @@
         html, body {
             height: 100%;
             margin: 0;
-            background: #F5F3FF;
+            background: #FAF7FF;
             color: var(--text);
             font-family: "Segoe UI", Arial, sans-serif;
         }
@@ -27,20 +27,34 @@
             flex-direction: column;
         }
 
+        /* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .topbar {
-            background: var(--bjmp-gold);
-            color: var(--bjmp-blue);
-            padding: 18px 24px;
+            background: linear-gradient(90deg, #5B21B6 0%, #7C3AED 58%, #F59E0B 100%);
+            color: #fff;
+            padding: 14px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-bottom: 4px solid var(--bjmp-blue);
+            border-bottom: 4px solid #F59E0B;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .page-tools {
+            background: linear-gradient(180deg, rgba(251, 191, 36, 0.18), rgba(124, 58, 237, 0.08));
+            border-bottom: 1px solid rgba(124,58,237,0.10);
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
         }
 
         .agency {
             font-size: 20px;
             font-weight: 700;
             letter-spacing: .2px;
+            white-space: nowrap;
         }
 
         .subtitle {
@@ -49,9 +63,242 @@
             margin-top: 2px;
         }
 
+        /* â”€â”€ Search bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        .search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.50);
+            border: 2px solid rgba(124,58,237,0.25);
+            border-radius: 8px;
+            padding: 5px 12px;
+            flex: 1;
+            max-width: 380px;
+            min-width: 180px;
+            transition: border-color .2s, background .2s;
+        }
+
+            .search-wrap:focus-within {
+                background: #fff;
+                border-color: #7C3AED;
+                box-shadow: 0 0 0 3px rgba(245,158,11,0.20);
+            }
+
+        .search-icon {
+            font-size: 15px;
+            opacity: .7;
+            flex-shrink: 0;
+            color: #4C1D95;
+        }
+
+        #calSearchInput {
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 14px;
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: #4C1D95;
+            width: 100%;
+        }
+
+            #calSearchInput::placeholder {
+                color: rgba(91,33,182,0.55);
+                font-style: italic;
+            }
+
+        .search-clear {
+            cursor: pointer;
+            font-size: 16px;
+            color: #4C1D95;
+            opacity: .5;
+            flex-shrink: 0;
+            display: none;
+            line-height: 1;
+            border: none;
+            background: none;
+            padding: 0;
+        }
+
+            .search-clear:hover {
+                opacity: 1;
+            }
+
+            .search-clear.visible {
+                display: block;
+            }
+
+        .page-tools .search-wrap {
+            max-width: 620px;
+            min-width: 260px;
+            flex: 1;
+        }
+
+        /* â”€â”€ Search results banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        #searchBanner {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(90deg, #5B21B6, #7C3AED 62%, #F59E0B 150%);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 7px 24px;
+            border-bottom: 2px solid #F59E0B;
+        }
+
+            #searchBanner.visible {
+                display: flex;
+            }
+
+            #searchBanner .banner-text {
+                flex: 1;
+            }
+
+            #searchBanner .banner-count {
+                background: #F59E0B;
+                color: #fff;
+                border-radius: 20px;
+                padding: 2px 10px;
+                font-size: 12px;
+                font-weight: 800;
+            }
+
+            #searchBanner .banner-clear {
+                background: rgba(255,255,255,0.18);
+                border: 1px solid rgba(255,255,255,0.4);
+                color: #fff;
+                border-radius: 5px;
+                padding: 3px 10px;
+                font-size: 12px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+                #searchBanner .banner-clear:hover {
+                background: rgba(255,255,255,0.3);
+            }
+
+        /* â”€â”€ No results message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        #searchResults {
+            display: none;
+            padding: 10px 18px 0;
+        }
+
+            #searchResults.visible {
+                display: block;
+            }
+
+            #searchResults .results-list {
+                max-height: calc(100vh - 190px);
+                overflow: auto;
+                padding-right: 4px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            #searchResults .result-row {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 10px 12px;
+                border: 1px solid rgba(76,29,149,0.14);
+                border-radius: 14px;
+                background: #fff;
+                box-shadow: 0 2px 8px rgba(76,29,149,0.06);
+                cursor: pointer;
+                transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+            }
+
+                #searchResults .result-row:hover {
+                    border-color: #F59E0B;
+                    box-shadow: 0 8px 18px rgba(76,29,149,0.10);
+                    transform: translateY(-1px);
+                }
+
+                #searchResults .result-row:focus-within {
+                    border-color: #F59E0B;
+                    box-shadow: 0 0 0 3px rgba(245,158,11,0.18);
+                }
+
+            #searchResults .result-date {
+                flex: 0 0 auto;
+                min-width: 170px;
+                text-align: center;
+                padding: 10px 14px;
+                border-radius: 12px;
+                background: linear-gradient(180deg, #FEF3C7 0%, #FDE68A 45%, #F59E0B 100%);
+                color: #4C1D95;
+                line-height: 1.1;
+                box-shadow: inset 0 -1px 0 rgba(76,29,149,0.08);
+            }
+
+            #searchResults .result-date-text {
+                font-size: 13px;
+                font-weight: 800;
+                letter-spacing: 0;
+                white-space: nowrap;
+            }
+
+            #searchResults .result-body {
+                min-width: 0;
+                flex: 1;
+            }
+
+            #searchResults .result-name {
+                font-size: 15px;
+                font-weight: 800;
+                color: #4C1D95;
+                margin-bottom: 3px;
+                text-transform: uppercase;
+                line-height: 1.15;
+            }
+
+            #searchResults .result-meta {
+                font-size: 12px;
+                color: rgba(30,27,75,0.72);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                letter-spacing: .1px;
+            }
+        #noResults {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 24px;
+            color: #4C1D95;
+            gap: 10px;
+        }
+
+            #noResults.visible {
+                display: flex;
+            }
+
+            #noResults .nr-icon {
+                font-size: 42px;
+                opacity: .4;
+            }
+
+            #noResults .nr-title {
+                font-size: 17px;
+                font-weight: 700;
+                opacity: .7;
+            }
+
+            #noResults .nr-sub {
+                font-size: 13px;
+                opacity: .5;
+            }
+
+        /* â”€â”€ Calendar container â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         #calendar {
             flex: 1;
             padding: 22px;
+        }
+        body.searching #calendar {
+            display: none;
         }
 
         .fc {
@@ -59,19 +306,19 @@
             border: 1px solid var(--panel-border);
             border-radius: 8px;
             padding: 18px;
-            min-height: calc(100vh - 112px);
+            min-height: calc(100vh - 160px);
             box-shadow: 0 10px 28px rgba(76, 29, 149, .10);
         }
 
             .fc .fc-toolbar-title {
-                color: var(--bjmp-blue);
+                color: #4C1D95;
                 font-size: 27px;
                 font-weight: 700;
             }
 
             .fc .fc-button-primary {
-                background: var(--bjmp-blue);
-                border-color: var(--bjmp-blue);
+                background: #5B21B6;
+                border-color: #5B21B6;
                 border-radius: 5px;
                 text-transform: capitalize;
                 box-shadow: none;
@@ -85,7 +332,7 @@
 
             .fc .fc-col-header-cell {
                 background: #EDE9FE;
-                color: var(--bjmp-blue);
+                color: #4C1D95;
                 padding: 8px 0;
                 font-weight: 700;
             }
@@ -121,7 +368,7 @@
             align-items: center;
             justify-content: center;
             background: var(--bjmp-gold);
-            color: var(--bjmp-blue);
+            color: #4C1D95;
             border-radius: 50%;
             font-size: 11px;
             font-weight: 800;
@@ -132,9 +379,9 @@
             box-shadow: 0 1px 3px rgba(76,29,149,0.18);
         }
 
-        /* Style the +N more link to look like a button */
+        /* Style the +N more link */
         .fc-daygrid-more-link {
-            background: var(--bjmp-blue) !important;
+            background: #5B21B6 !important;
             color: #fff !important;
             border-radius: 4px !important;
             padding: 1px 6px !important;
@@ -145,47 +392,42 @@
 
         /* Today highlight */
         .fc .fc-day-today {
-            background: #FEF9C3 !important;
+            background: #FEF3C7 !important;
         }
 
-
-        /* Hide events and more links in month view to keep it clean and only show the count badge */
+        /* Hide events in month view â€” use count badges instead */
         .fc-dayGridMonth-view .fc-daygrid-event,
         .fc-dayGridMonth-view .fc-daygrid-event-harness,
         .fc-dayGridMonth-view .fc-daygrid-more-link {
             display: none !important;
         }
 
+        /* PDL highlight */
         .pdl-highlight {
             background-color: #FEF3C7 !important;
-            box-shadow: inset 0 0 0 2px #F59E0B !important;
+            box-shadow: inset 0 0 0 2px #7C3AED !important;
         }
 
-        .legend {
-            display: flex;
-            gap: 16px;
-            font-size: 13px;
-            font-weight: 600;
+        /* Search-matched event highlight in list view */
+        .fc-event.search-match {
+            background-color: #FDE68A !important;
+            color: #1E1B4B !important;
+            border-left: 3px solid #7C3AED !important;
         }
 
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(76, 29, 149, 0.10);
-            padding: 5px 12px;
-            border-radius: 20px;
-            color: var(--bjmp-blue);
+        .fc-event.search-nomatch {
+            opacity: 0.18 !important;
         }
 
-        .legend-badge {
-            display: inline-block;
-            border-radius: 50%;
+        /* Month view: highlight cells that have a match */
+        .fc-daygrid-day.search-day-match {
+            background: #FEF3C7 !important;
+            box-shadow: inset 0 0 0 2px #7C3AED !important;
         }
 
         .badge-count {
-            background: var(--bjmp-gold);
-            color: var(--bjmp-blue);
+            background: #F59E0B;
+            color: #4C1D95;
             text-align: center;
             font-size: 9px;
             font-weight: 800;
@@ -197,12 +439,19 @@
 
         .badge-highlight {
             background-color: #FEF3C7;
-            border: 2px solid #F59E0B;
+            border: 2px solid #A855F7;
             width: 10px;
             height: 10px;
             border-radius: 3px;
         }
 
+        .badge-search {
+            background: #F59E0B;
+            border: 2px solid #A855F7;
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -212,156 +461,404 @@
                 <div class="agency">BJMP Hearing Scheduling Dashboard</div>
                 <div class="subtitle">Excel-backed calendar management</div>
             </div>
-            <div class="legend">
-                <div class="legend-item">
-                    <span class="legend-badge badge-count">#</span>
-                    <span>Daily Hearing Count</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-badge badge-highlight"></span>
-                    <span>Selected Person's Hearings</span>
-                </div>
-            </div>
         </header>
+
+        <div class="page-tools">
+            <div class="search-wrap" title="Search hearings by name, court, or case no.">
+                <span class="search-icon">&#128269;</span>
+                <input id="calSearchInput" type="text" placeholder="Search person, court, or case no..." autocomplete="off" spellcheck="false">
+                <button class="search-clear" id="searchClearBtn" title="Clear search">&times;</button>
+            </div>
+        </div>
+
+        <!-- Search results banner (shown when a query is active) -->
+        <div id="searchBanner">
+            <span class="banner-text" id="bannerText">Showing results for ""</span>
+            <span class="banner-count" id="bannerCount">0 matches</span>
+            <button class="banner-clear" onclick="clearSearch()">&times; Clear</button>
+        </div>
+        <div id="searchResults">
+            <div class="results-list" id="resultsList"></div>
+        </div>
+        <!-- No-results overlay -->
+        <div id="noResults">
+            <div class="nr-icon">&#128269;</div>
+            <div class="nr-title" id="noResultsTitle">No hearings found</div>
+            <div class="nr-sub" id="noResultsSub">Try a different name or court</div>
+        </div>
+
         <main id="calendar"></main>
     </div>
 
-    <script>
-        let calendar;
+    <script>let calendar;
         let currentEvents = [];
         let highlightedDates = [];
+        let currentQuery = '';
 
-        window.highlightPdlHearings = function (dates) {
-            // Remove previous highlights
-            document.querySelectorAll('.pdl-highlight').forEach(el => {
-                el.classList.remove('pdl-highlight');
-            });
-            highlightedDates = dates || [];
-            if (highlightedDates.length === 0) return;
-            // Add highlights to dates
-            highlightedDates.forEach(dateStr => {
-                const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
-                if (cell) {
-                    cell.classList.add('pdl-highlight');
-                }
-            });
-        };
-
+        // â”€â”€ Messaging to VB host â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         function post(message) {
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage(message);
             }
         }
 
-        function updatePersonCounts() {
-            // Clear all existing badges
-            document.querySelectorAll('.person-count-badge').forEach(b => b.remove());
+        // â”€â”€ PDL highlight (called from VB) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        window.highlightPdlHearings = function (dates) {
+            document.querySelectorAll('.pdl-highlight').forEach(el => el.classList.remove('pdl-highlight'));
+            highlightedDates = dates || [];
+            if (highlightedDates.length === 0) return;
+            highlightedDates.forEach(dateStr => {
+                const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+                if (cell) cell.classList.add('pdl-highlight');
+            });
+        };
 
-            // Count events per date
+        // â”€â”€ Person-count badges (month view) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        function updatePersonCounts(eventsToCount) {
+            document.querySelectorAll('.person-count-badge').forEach(b => b.remove());
+            const source = eventsToCount || currentEvents;
             const dateCounts = {};
-            currentEvents.forEach(ev => {
+            source.forEach(ev => {
                 const d = (typeof ev.start === 'string') ? ev.start.substring(0, 10) : ev.start;
                 dateCounts[d] = (dateCounts[d] || 0) + 1;
             });
-
-            // Add badges to date number cells
             for (const [dateStr, count] of Object.entries(dateCounts)) {
                 const dayCell = document.querySelector(`[data-date="${dateStr}"] .fc-daygrid-day-top`);
                 if (dayCell) {
                     const badge = document.createElement('span');
                     badge.className = 'person-count-badge';
                     badge.textContent = count;
-                    badge.title = count + ' hearing(s) scheduled';
+                    badge.title = count + ' hearing(s)';
                     dayCell.appendChild(badge);
                 }
             }
         }
 
+        function refreshCalendarLayout() {
+            if (!calendar) return;
+            setTimeout(() => calendar.updateSize(), 0);
+        }
+
+        // â”€â”€ Core render (called from VB) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         window.renderHearings = function (events) {
             currentEvents = events;
             calendar.removeAllEvents();
             calendar.addEventSource(events);
-            // Update person counts after events are rendered
-            setTimeout(updatePersonCounts, 100);
+            setTimeout(() => {
+                updatePersonCounts();
+                if (currentQuery) applySearch(currentQuery);
+            }, 100);
         };
 
+        window.focusCalendarDate = function (dateStr) {
+            if (!calendar || !dateStr) return;
+            calendar.changeView('dayGridMonth');
+            calendar.gotoDate(dateStr);
+        };
+
+        // â”€â”€ Search logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        function normalise(str) {
+            return (str || '').toLowerCase().trim();
+        }
+
+        function eventMatchesQuery(ev, q) {
+            const props = ev.extendedProps || {};
+            return normalise(props.name).includes(q)
+                || normalise(props.caseNo || ev.title).includes(q)
+                || normalise(props.court).includes(q)
+                || normalise(props.hearing1).includes(q)
+                || normalise(props.hearing2).includes(q);
+        }
+        function formatSearchDateParts(dateValue) {
+            const date = new Date((typeof dateValue === 'string') ? dateValue.substring(0, 10) : dateValue);
+            return {
+                full: new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).format(date)
+            };
+        }
+
+        function renderSearchResults(events) {
+            const resultsWrap = document.getElementById('searchResults');
+            const resultsList = document.getElementById('resultsList');
+            resultsList.innerHTML = '';
+
+            if (!events || events.length === 0) {
+                resultsWrap.classList.remove('visible');
+                return;
+            }
+
+            events.forEach(ev => {
+                const props = ev.extendedProps || {};
+                const parts = formatSearchDateParts(ev.start);
+                const row = document.createElement('div');
+                row.className = 'result-row';
+                row.title = 'Open hearing details';
+                row.addEventListener('click', () => post({ action: 'select', id: ev.id }));
+                row.addEventListener('dblclick', () => post({ action: 'detail', id: ev.id }));
+
+                const dateBox = document.createElement('div');
+                dateBox.className = 'result-date';
+                dateBox.innerHTML = '<div class="result-date-text">' + parts.full + '</div>';
+
+                const body = document.createElement('div');
+                body.className = 'result-body';
+
+                const name = document.createElement('div');
+                name.className = 'result-name';
+                name.textContent = props.name || ev.title || 'Hearing';
+
+                const meta = document.createElement('div');
+                meta.className = 'result-meta';
+                meta.textContent = [
+                    props.caseNo || ev.title || '',
+                    props.court || '',
+                    props.hearing1 || '',
+                    props.hearing2 || ''
+                ].filter(Boolean).join(' \u2022 ');
+
+                body.appendChild(name);
+                body.appendChild(meta);
+                row.appendChild(dateBox);
+                row.appendChild(body);
+                resultsList.appendChild(row);
+            });
+
+            resultsWrap.classList.add('visible');
+        }
+        function applySearch(query) {
+            currentQuery = query;
+            const q = normalise(query);
+
+            const noResEl  = document.getElementById('noResults');
+            const banner   = document.getElementById('searchBanner');
+            const clearBtn = document.getElementById('searchClearBtn');
+            const resultsWrap = document.getElementById('searchResults');
+            const resultsList = document.getElementById('resultsList');
+
+            // Remove old search styling from day cells
+            document.querySelectorAll('.search-day-match').forEach(el => el.classList.remove('search-day-match'));
+
+            if (!q) {
+                // â”€â”€ No query: restore everything â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                noResEl.classList.remove('visible');
+                banner.classList.remove('visible');
+                clearBtn.classList.remove('visible');
+                resultsWrap.classList.remove('visible');
+                resultsList.innerHTML = '';
+                document.body.classList.remove('searching');
+
+                // Restore all events to full opacity
+                document.querySelectorAll('.fc-event').forEach(el => {
+                    el.classList.remove('search-match', 'search-nomatch');
+                });
+                updatePersonCounts();
+                refreshCalendarLayout();
+                return;
+            }
+
+            clearBtn.classList.add('visible');
+
+            // Identify matching events
+            const matchingEvents = currentEvents
+                .filter(ev => eventMatchesQuery(ev, q))
+                .slice()
+                .sort((a, b) => {
+                    const aDate = new Date((typeof a.start === 'string') ? a.start.substring(0, 10) : a.start);
+                    const bDate = new Date((typeof b.start === 'string') ? b.start.substring(0, 10) : b.start);
+                    return aDate - bDate || normalise(a.title).localeCompare(normalise(b.title));
+                });
+            const matchCount = matchingEvents.length;
+
+            if (matchCount === 0) {
+                // â”€â”€ No results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                noResEl.classList.add('visible');
+                document.getElementById('noResultsTitle').textContent = `No hearings found for "${query}"`;
+                document.getElementById('noResultsSub').textContent = 'Try a different name, court, or case number';
+                banner.classList.remove('visible');
+                resultsWrap.classList.remove('visible');
+                resultsList.innerHTML = '';
+                document.body.classList.remove('searching');
+                refreshCalendarLayout();
+                return;
+            }
+
+            // â”€â”€ Results found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            noResEl.classList.remove('visible');
+            resultsWrap.classList.add('visible');
+            document.body.classList.add('searching');
+            renderSearchResults(matchingEvents);
+            
+            // Update banner
+            banner.classList.add('visible');
+            document.getElementById('bannerText').textContent = `Showing hearings matching "${query}"`;
+            document.getElementById('bannerCount').textContent =
+                matchCount === 1 ? '1 match' : `${matchCount} matches`;
+
+            // Collect matched dates for month-view day highlighting
+            const matchedDates = new Set(matchingEvents.map(ev =>
+                (typeof ev.start === 'string') ? ev.start.substring(0, 10) : ev.start
+            ));
+
+                // Style all rendered FC events
+                setTimeout(() => {
+                document.querySelectorAll('.fc-event').forEach(fcEl => {
+                    // Try to find the event id from the element's data attribute
+                    const eventId = fcEl.closest('[data-event-id]')?.dataset?.eventId
+                        || fcEl.dataset?.eventId;
+
+                    // Fall back: match by visible title text (list view shows "NAME  (No. X)")
+                    const titleEl = fcEl.querySelector('.fc-event-title, .fc-list-event-title a');
+                    const titleText = titleEl ? normalise(titleEl.textContent) : '';
+
+                    const isMatch = matchingEvents.some(ev => {
+                        const props = ev.extendedProps || {};
+                        const name = normalise(props.name || '');
+                        const caseNo = normalise(props.caseNo || ev.title || '');
+                        const court = normalise(props.court || '');
+                        return titleText.includes(name) || titleText.includes(caseNo) ||
+                               (name && name.includes(q)) || (caseNo && caseNo.includes(q)) || (court && court.includes(q));
+                    });
+
+                    if (isMatch) {
+                        fcEl.classList.add('search-match');
+                        fcEl.classList.remove('search-nomatch');
+                    } else {
+                        fcEl.classList.add('search-nomatch');
+                        fcEl.classList.remove('search-match');
+                    }
+                });
+
+                // Month view: highlight matching day cells
+                matchedDates.forEach(dateStr => {
+                    const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+                    if (cell) cell.classList.add('search-day-match');
+                });
+
+                // Update count badges to show only matched counts
+                updatePersonCounts(matchingEvents);
+            }, 80);
+        }
+
+        function clearSearch() {
+            document.getElementById('calSearchInput').value = '';
+            applySearch('');
+        }
+
+        // â”€â”€ Wire up the search input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        let searchDebounce;
         document.addEventListener('DOMContentLoaded', function () {
+            const input = document.getElementById('calSearchInput');
+
+            input.addEventListener('input', function () {
+                clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(() => applySearch(this.value), 220);
+            });
+
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') clearSearch();
+            });
+
+            document.getElementById('searchClearBtn').addEventListener('click', clearSearch);
+
+            // â”€â”€ FullCalendar init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
                 initialView: 'dayGridMonth',
                 height: '100%',
                 expandRows: true,
                 editable: true,
                 selectable: true,
-                // Per-view settings: hide event bars in month view (use count badges instead),
-                // but show events normally in list view
                 views: {
-                    dayGridMonth: {
-                        eventDisplay: 'none'
-                    },
-                    listMonth: {
-                        eventDisplay: 'block'
-                    }
+                    dayGridMonth: { eventDisplay: 'none' },
+                    listMonth:    { eventDisplay: 'block' }
                 },
+                eventOrder: 'start,title',
                 headerToolbar: {
-                    left: 'prev,next today',
+                    left:   'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,listMonth'
+                    right:  'dayGridMonth,listMonth'
                 },
                 dateClick: function (info) {
                     post({ action: 'dateview', date: info.dateStr });
                 },
                 moreLinkClick: function (info) {
-                    // Send dateview for that date so VB shows the full hearing popup with search
                     post({ action: 'dateview', date: info.date.toISOString().substring(0, 10) });
-                    return 'stop'; // prevent FullCalendar's own popover
+                    return 'stop';
                 },
                 eventClick: function (info) {
                     post({ action: 'select', id: info.event.id });
                 },
                 eventDrop: function (info) {
-                    // Send both old and new date for history logging
-                    var oldDate = info.oldEvent.startStr.substring(0, 10);
-                    var newDate = info.event.startStr.substring(0, 10);
+                    const oldDate = info.oldEvent.startStr.substring(0, 10);
+                    const newDate = info.event.startStr.substring(0, 10);
                     post({ action: 'move', id: info.event.id, date: newDate, oldDate: oldDate });
                 },
                 eventDidMount: function (info) {
-                    var props = info.event.extendedProps || {};
-                    var caseNo = props.caseNo || info.event.title;
-                    var name   = props.name  || '';
+                    const props = info.event.extendedProps || {};
+                    const caseNo = props.caseNo || info.event.title;
+                    const name   = props.name  || '';
 
-                    // In list view: show "NAME  (No. X)" so the person is immediately visible
-                    var titleEl = info.el.querySelector('.fc-list-event-title a') ||
-                                  info.el.querySelector('.fc-event-title');
+                    const titleEl = info.el.querySelector('.fc-list-event-title a') ||
+                                    info.el.querySelector('.fc-event-title');
                     if (titleEl) {
-                        if (name) {
-                            titleEl.textContent = name + '  (No. ' + caseNo + ')';
-                        } else {
-                            titleEl.textContent = caseNo;
-                        }
+                        titleEl.textContent = name
+                            ? name + '  (No. ' + caseNo + ')'
+                            : caseNo;
                     }
 
-                    // Full tooltip shows all details
-                    var tip = 'Case No: ' + caseNo;
+                    let tip = 'Case No: ' + caseNo;
                     if (name)           tip += '\nName: '    + name;
                     if (props.court)    tip += '\nCourt: '   + props.court;
                     if (props.hearing1) tip += '\nHearing: ' + props.hearing1;
                     if (props.hearing2) tip += '\nHearing: ' + props.hearing2;
                     info.el.title = tip;
+
+                    // Re-apply search styling to newly mounted events
+                    if (currentQuery) {
+                        const q = normalise(currentQuery);
+                        const isMatch = eventMatchesQuery({
+                            title: info.event.title,
+                            extendedProps: props
+                        }, q);
+                        if (isMatch) {
+                            info.el.classList.add('search-match');
+                        } else {
+                            info.el.classList.add('search-nomatch');
+                        }
+                    }
                 },
                 datesSet: function (info) {
-                    // Re-apply person count badges only in month view
                     if (info.view.type === 'dayGridMonth') {
-                        setTimeout(updatePersonCounts, 150);
+                        setTimeout(() => {
+                            updatePersonCounts(
+                                currentQuery
+                                    ? currentEvents.filter(ev => eventMatchesQuery(ev, normalise(currentQuery)))
+                                    : null
+                            );
+                            if (currentQuery) {
+                                // Re-highlight matched day cells after navigation
+                                document.querySelectorAll('.search-day-match').forEach(el => el.classList.remove('search-day-match'));
+                                const q = normalise(currentQuery);
+                                currentEvents.filter(ev => eventMatchesQuery(ev, q)).forEach(ev => {
+                                    const dateStr = (typeof ev.start === 'string') ? ev.start.substring(0, 10) : ev.start;
+                                    const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+                                    if (cell) cell.classList.add('search-day-match');
+                                });
+                            }
+                        }, 150);
                     }
-                    setTimeout(function() {
-                        highlightPdlHearings(highlightedDates);
-                    }, 160);
+                    setTimeout(() => highlightPdlHearings(highlightedDates), 160);
                 }
             });
 
             calendar.render();
             post({ action: 'ready' });
-        });
-    </script>
+        });</script>
 </body>
 </html>
+
+
+
+
+
+
+
+
